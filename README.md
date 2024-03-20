@@ -83,4 +83,33 @@ sort this out for yourself.
 $ ./ubns_server.py
 ```
 
-XXX
+### Running the client
+
+```sh
+# Add a bucket.
+$ ./ubns_client.py add --bucket foo
+INFO:root:server response:
+
+# Adding it again will fail.
+$ ./ubns_client.py add --bucket foo
+./ubns_client.py add --bucket foo
+ERROR:root:RPC failed: <_InactiveRpcError of RPC that terminated with:
+        status = StatusCode.INVALID_ARGUMENT
+        details = "bucket 'foo' already exists"
+        debug_error_string = "UNKNOWN:Error received from peer ipv4:127.0.0.1:9000 {created_time:"2024-03-20T12:49:22.212626+00:00", grpc_status:3, grpc_message:"bucket \'foo\' already exists"}"
+>
+
+# Delete the bucket.
+$ ./ubns_client.py delete --bucket foo
+INFO:root:server response:
+
+# Re-deleting the bucket won't work.
+$ ./ubns_client.py delete --bucket foo
+ERROR:root:RPC failed: <_InactiveRpcError of RPC that terminated with:
+        status = StatusCode.INVALID_ARGUMENT
+        details = "bucket 'foo' not found"
+        debug_error_string = "UNKNOWN:Error received from peer ipv4:127.0.0.1:9000 {created_time:"2024-03-20T12:50:49.842862+00:00", grpc_status:3, grpc_message:"bucket \'foo\' not found"}"
+>
+
+# XXX update doesn't do anything yet.
+```

@@ -22,43 +22,72 @@ import sys
 from ubdb.v1 import ubdb_pb2_grpc
 from ubdb.v1 import ubdb_pb2
 
-def auth_error_status(e: Exception):
-    """
-    Create a gRPC status response embedding the given code and error message.
+class BucketNotFoundError(Exception):
+    def __init__(self, bucket):
+        super().__init__(f"bucket '{bucket}' not found")
 
-    This is fiddly: See https://grpc.io/docs/guides/error/ .
-    """
+class BucketAlreadyExistsError(Exception):
+    def __init__(self, bucket):
+        super().__init__(f"bucket '{bucket}' already exists")
 
-    # The standard Status takes an Any field for message-specific error
-    # details. We'll use this to embed the S3 error type and HTTP status code.
+class BucketNameDatabase:
 
-    detail = any_pb2.Any()
-    detail.Pack(
-        ubdb_pb2.S3ErrorDetails(
-            type=e.s3_error_type,
-            http_status_code=e.http_error_code,
-        )
-    )
-    return status_pb2.Status(
-        code=e.grpc_code,
-        message=e.message,
-        details=[detail],
-    )
+    def __init__(self):
+        self.buckets = set()
 
+    def add_bucket(self, bucket_name):
+        if bucket_name in self.buckets:
+            raise BucketAlreadyExistsError(bucket_name)
+        self.buckets.add(bucket_name)
+
+    def delete_bucket(self, bucket_name):
+        try:
+            self.buckets.remove(bucket_name)
+        except KeyError:
+            raise BucketNotFoundError(bucket_name)
+
+    def update_bucket(self, bucket_name, new_name):
+        if bucket_name not in self.buckets:
+            raise BucketNotFoundError(bucket_name)
+        raise Exception("not implemented")
 
 class UBDBServer(ubdb_pb2_grpc.UBDBServiceServicer):
 
+    def __init__(self):
+        self.db = BucketNameDatabase()
+
+    def set_context_error(self, context, e: Exception):
+        context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
+        context.set_details(str(e))
+        return
+
     def AddBucketEntry(self, request, context):
         logging.info(f"AddBucketEntry: {request}")
-        return ubdb_pb2.AddBucketEntryResponse()
+        try:
+            self.db.add_bucket(request.bucket)
+            return ubdb_pb2.AddBucketEntryResponse()
+        except BucketAlreadyExistsError as e:
+            self.set_context_error(context, e)
+            return ubdb_pb2.AddBucketEntryResponse()
 
     def DeleteBucketEntry(self, request, context):
         logging.info(f"DeleteBucketEntry: {request}")
-        return ubdb_pb2.DeleteBucketEntryResponse()
+        try:
+            self.db.delete_bucket(request.bucket)
+            return ubdb_pb2.DeleteBucketEntryResponse()
+        except BucketNotFoundError as e:
+            self.set_context_error(context, e)
+            return ubdb_pb2.DeleteBucketEntryResponse()
+
 
     def UpdateBucketEntry(self, request, context):
         logging.info(f"UpdateBucketEntry: {request}")
-        return ubdb_pb2.UpdateBucketEntryResponse()
+        try:
+            self.db.update_bucket(request.bucket)
+            return ubdb_pb2.UpdateBucketEntryResponse()
+        except BucketNotFoundError as e:
+            self.set_context_error(context, e)
+            return ubdb_pb2.UpdateBucketEntryResponse()
 
 
 def _load_credential_from_file(filepath):
