@@ -47,7 +47,19 @@ def auth_error_status(e: Exception):
 
 
 class UBDBServer(ubdb_pb2_grpc.UBDBServiceServicer):
-    pass
+
+    def AddBucketEntry(self, request, context):
+        logging.info(f"AddBucketEntry: {request}")
+        return ubdb_pb2.AddBucketEntryResponse()
+
+    def DeleteBucketEntry(self, request, context):
+        logging.info(f"DeleteBucketEntry: {request}")
+        return ubdb_pb2.DeleteBucketEntryResponse()
+
+    def UpdateBucketEntry(self, request, context):
+        logging.info(f"UpdateBucketEntry: {request}")
+        return ubdb_pb2.UpdateBucketEntryResponse()
+
 
 def _load_credential_from_file(filepath):
     """https://github.com/grpc/grpc/blob/master/examples/python/auth/_credentials.py"""
