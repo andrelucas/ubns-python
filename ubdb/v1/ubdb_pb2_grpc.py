@@ -6,7 +6,8 @@ from ubdb.v1 import ubdb_pb2 as ubdb_dot_v1_dot_ubdb__pb2
 
 
 class UBDBServiceStub(object):
-    """UBDBService provides an endpoint for UBDB.
+    """UBDBService provides the endpoints to manage BucketEntry records
+    within UBNS.
     """
 
     def __init__(self, channel):
@@ -30,10 +31,16 @@ class UBDBServiceStub(object):
                 request_serializer=ubdb_dot_v1_dot_ubdb__pb2.UpdateBucketEntryRequest.SerializeToString,
                 response_deserializer=ubdb_dot_v1_dot_ubdb__pb2.UpdateBucketEntryResponse.FromString,
                 )
+        self.Reconcile = channel.unary_unary(
+                '/ubdb.v1.UBDBService/Reconcile',
+                request_serializer=ubdb_dot_v1_dot_ubdb__pb2.ReconcileRequest.SerializeToString,
+                response_deserializer=ubdb_dot_v1_dot_ubdb__pb2.ReconcileResponse.FromString,
+                )
 
 
 class UBDBServiceServicer(object):
-    """UBDBService provides an endpoint for UBDB.
+    """UBDBService provides the endpoints to manage BucketEntry records
+    within UBNS.
     """
 
     def AddBucketEntry(self, request, context):
@@ -51,7 +58,14 @@ class UBDBServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def UpdateBucketEntry(self, request, context):
-        """UpdateBucketEntry deletes a BucketEntry in UBDB.
+        """UpdateBucketEntry updates the state of a BucketEntry in UBDB.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Reconcile(self, request, context):
+        """Force trigger a reconciliation of UBDB with the Ceph clusters.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -75,6 +89,11 @@ def add_UBDBServiceServicer_to_server(servicer, server):
                     request_deserializer=ubdb_dot_v1_dot_ubdb__pb2.UpdateBucketEntryRequest.FromString,
                     response_serializer=ubdb_dot_v1_dot_ubdb__pb2.UpdateBucketEntryResponse.SerializeToString,
             ),
+            'Reconcile': grpc.unary_unary_rpc_method_handler(
+                    servicer.Reconcile,
+                    request_deserializer=ubdb_dot_v1_dot_ubdb__pb2.ReconcileRequest.FromString,
+                    response_serializer=ubdb_dot_v1_dot_ubdb__pb2.ReconcileResponse.SerializeToString,
+            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
             'ubdb.v1.UBDBService', rpc_method_handlers)
@@ -83,7 +102,8 @@ def add_UBDBServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class UBDBService(object):
-    """UBDBService provides an endpoint for UBDB.
+    """UBDBService provides the endpoints to manage BucketEntry records
+    within UBNS.
     """
 
     @staticmethod
@@ -134,5 +154,22 @@ class UBDBService(object):
         return grpc.experimental.unary_unary(request, target, '/ubdb.v1.UBDBService/UpdateBucketEntry',
             ubdb_dot_v1_dot_ubdb__pb2.UpdateBucketEntryRequest.SerializeToString,
             ubdb_dot_v1_dot_ubdb__pb2.UpdateBucketEntryResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def Reconcile(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/ubdb.v1.UBDBService/Reconcile',
+            ubdb_dot_v1_dot_ubdb__pb2.ReconcileRequest.SerializeToString,
+            ubdb_dot_v1_dot_ubdb__pb2.ReconcileResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
