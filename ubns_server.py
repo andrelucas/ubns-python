@@ -8,6 +8,7 @@ Usage::
 
 import argparse
 from concurrent import futures
+from enum import Enum
 from google.protobuf import any_pb2
 from google.rpc import code_pb2
 from google.rpc import error_details_pb2
@@ -22,34 +23,129 @@ import sys
 from ubdb.v1 import ubdb_pb2_grpc
 from ubdb.v1 import ubdb_pb2
 
+
 class BucketNotFoundError(Exception):
     def __init__(self, bucket):
         super().__init__(f"bucket '{bucket}' not found")
+
 
 class BucketAlreadyExistsError(Exception):
     def __init__(self, bucket):
         super().__init__(f"bucket '{bucket}' already exists")
 
+
+class BucketDeleteWhenNotInDeletingState(Exception):
+    def __init__(self, bucket):
+        super().__init__(f"bucket '{bucket}' is not in the DELETING state for deletion")
+
+
+class MismatchedClusterError(Exception):
+    def __init__(self, bucket, cluster):
+        super().__init__(
+            f"bucket '{bucket}' cluster '{cluster}' does not match existing cluster '{cluster}'"
+        )
+
+
+class BucketState(Enum):
+    NONE = 0
+    CREATING = 1
+    CREATED = 2
+    DELETING = 3
+    DELETED = 4
+
+
+class Bucket:
+    def __init__(self, name, owner, cluster):
+        self.name = name
+        self.owner = owner
+        self.cluster = cluster
+        self.state = BucketState.NONE
+
+    def state(self):
+        return self.state
+
+    def owner(self):
+        return self.owner
+
+    def cluster(self):
+        return self.cluster
+
+    def __str__(self):
+        return f"Bucket(name={self.name}, owner={self.owner}, cluster={self.cluster}, state={self.state})"
+
+
 class BucketNameDatabase:
 
     def __init__(self):
-        self.buckets = set()
+        self.buckets: dict[str, Bucket] = {}
 
-    def add_bucket(self, bucket_name):
+    def add_bucket(self, bucket_name, owner, cluster):
         if bucket_name in self.buckets:
+            logging.error(f"Bucket '{bucket_name}' already exists")
             raise BucketAlreadyExistsError(bucket_name)
-        self.buckets.add(bucket_name)
 
-    def delete_bucket(self, bucket_name):
-        try:
-            self.buckets.remove(bucket_name)
-        except KeyError:
-            raise BucketNotFoundError(bucket_name)
+        bucket = Bucket(bucket_name, owner, cluster)
+        logging.info(f"add_bucket: new bucket={bucket_name}")
 
-    def update_bucket(self, bucket_name, new_name):
+        self.buckets[bucket_name] = bucket
+        self.buckets[bucket_name].state = BucketState.CREATING
+        logging.info(f"Added bucket: {self.buckets[bucket_name]}")
+
+    def delete_bucket(self, bucket_name: str, cluster: str):
         if bucket_name not in self.buckets:
+            logging.error(f"Bucket '{bucket_name}' not found")
             raise BucketNotFoundError(bucket_name)
-        raise Exception("not implemented")
+
+        bucket = self.buckets[bucket_name]
+        logging.info(f"delete_bucket: current bucket={bucket}")
+
+        if bucket.cluster != cluster:
+            logging.error(
+                f"Cluster '{cluster}' does not match existing cluster '{bucket.cluster}'"
+            )
+            raise MismatchedClusterError(bucket_name, cluster)
+
+        if bucket.state != BucketState.DELETING:
+            msg = "bucket '{bucket_name}' is not in the DELETING state"
+            logging.error(msg)
+            raise Exception(msg)
+
+        logging.info(f"Deleting bucket: {self.buckets[bucket_name]}")
+        del self.buckets[bucket_name]
+
+    def update_bucket(self, bucket_name: str, cluster: str, state: str):
+        if bucket_name not in self.buckets:
+            logging.error(f"Bucket '{bucket_name}' not found")
+            raise BucketNotFoundError(bucket_name)
+
+        bucket = self.buckets[bucket_name]
+        logging.info(f"update_bucket: current bucket={bucket}")
+
+        if bucket.cluster != cluster:
+            logging.error(
+                f"Cluster '{cluster}' does not match existing cluster '{bucket.cluster}'"
+            )
+            raise MismatchedClusterError(bucket_name, cluster)
+
+        if state == BucketState.CREATED:
+            if bucket.state != BucketState.CREATING:
+                msg = f"bucket '{bucket_name}' is not in the CREATING state for CREATED update"
+                logging.error(msg)
+                raise Exception(msg)
+            else:
+                bucket.state = BucketState.CREATED
+                logging.info(f"Updated bucket: {self.buckets[bucket_name]}")
+        elif state == BucketState.DELETING:
+            if bucket.state != BucketState.CREATED:
+                msg = f"bucket '{bucket_name}' is not in the CREATED state for DELETING update"
+                logging.error(msg)
+                raise Exception(msg)
+            else:
+                bucket.state = BucketState.DELETING
+                logging.info(f"Updated bucket: {self.buckets[bucket_name]}")
+        else:
+            raise Exception(f"Unknown state '{state}'")
+
 
 class UBDBServer(ubdb_pb2_grpc.UBDBServiceServicer):
 
@@ -62,30 +158,41 @@ class UBDBServer(ubdb_pb2_grpc.UBDBServiceServicer):
         return
 
     def AddBucketEntry(self, request, context):
-        logging.info(f"AddBucketEntry: {request}")
+        logging.info(
+            f"received: AddBucketEntry: bucket={request.bucket} owner={request.owner} cluster={request.cluster}"
+        )
         try:
-            self.db.add_bucket(request.bucket)
+            self.db.add_bucket(request.bucket, request.owner, request.cluster)
             return ubdb_pb2.AddBucketEntryResponse()
-        except BucketAlreadyExistsError as e:
+        except Exception as e:
             self.set_context_error(context, e)
             return ubdb_pb2.AddBucketEntryResponse()
 
     def DeleteBucketEntry(self, request, context):
-        logging.info(f"DeleteBucketEntry: {request}")
+        logging.info(
+            f"received: DeleteBucketEntry: bucket={request.bucket} cluster={request.cluster}"
+        )
         try:
-            self.db.delete_bucket(request.bucket)
+            self.db.delete_bucket(request.bucket, request.cluster)
             return ubdb_pb2.DeleteBucketEntryResponse()
-        except BucketNotFoundError as e:
+        except Exception as e:
             self.set_context_error(context, e)
             return ubdb_pb2.DeleteBucketEntryResponse()
 
-
     def UpdateBucketEntry(self, request, context):
-        logging.info(f"UpdateBucketEntry: {request}")
+        logging.info(
+            f"received: UpdateBucketEntry: bucket={request.bucket} cluster={request.cluster} state={request.state}"
+        )
+        if request.state == ubdb_pb2.BucketState.BUCKET_STATE_CREATED:
+            bstate = BucketState.CREATED
+        elif request.state == ubdb_pb2.BucketState.BUCKET_STATE_DELETING:
+            bstate = BucketState.DELETING
+        else:
+            raise Exception(f"Unknown update state '{request.state}'")
         try:
-            self.db.update_bucket(request.bucket)
+            self.db.update_bucket(request.bucket, request.cluster, bstate)
             return ubdb_pb2.UpdateBucketEntryResponse()
-        except BucketNotFoundError as e:
+        except Exception as e:
             self.set_context_error(context, e)
             return ubdb_pb2.UpdateBucketEntryResponse()
 

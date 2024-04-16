@@ -42,6 +42,9 @@ def unpack_grpc_error(e: grpc.RpcError):
 def add(stub: ubdb_pb2_grpc.UBDBServiceStub, args):
     req = ubdb_pb2.AddBucketEntryRequest()
     req.bucket = args.bucket
+    req.owner = args.owner
+    req.cluster = args.cluster
+
     try:
         response: ubdb_pb2.AddBucketResponse = stub.AddBucketEntry(req)
         logging.info(f"server response: {response}")
@@ -51,9 +54,11 @@ def add(stub: ubdb_pb2_grpc.UBDBServiceStub, args):
         unpack_grpc_error(e)
         return False
 
+
 def delete(stub: ubdb_pb2_grpc.UBDBServiceStub, args):
     req = ubdb_pb2.DeleteBucketEntryRequest()
     req.bucket = args.bucket
+    req.cluster = args.cluster
     try:
         response: ubdb_pb2.DeleteBucketResponse = stub.DeleteBucketEntry(req)
         logging.info(f"server response: {response}")
@@ -63,9 +68,19 @@ def delete(stub: ubdb_pb2_grpc.UBDBServiceStub, args):
         unpack_grpc_error(e)
         return False
 
+
 def update(stub: ubdb_pb2_grpc.UBDBServiceStub, args):
     req = ubdb_pb2.UpdateBucketEntryRequest()
     req.bucket = args.bucket
+    req.cluster = args.cluster
+    if args.update_state == "created":
+        req.state = ubdb_pb2.BucketState.BUCKET_STATE_CREATED
+    elif args.update_state == "deleting":
+        req.state = ubdb_pb2.BucketState.BUCKET_STATE_DELETING
+    else:
+        logging.error(f"Unknown state '{args.state}'")
+        return False
+
     try:
         response: ubdb_pb2.UpdateBucketEntryResponse = stub.UpdateBucketEntry(req)
         logging.info(f"server response: {response}")
@@ -102,7 +117,9 @@ def _load_credential_from_file(filepath):
 
 def main(argv):
     p = argparse.ArgumentParser(description="AuthService client")
-    p.add_argument("command", help="command to run", choices=["add", "delete", "update"])
+    p.add_argument(
+        "command", help="command to run", choices=["add", "delete", "update"]
+    )
     p.add_argument("--bucket", help="bucket name", required=True)
     p.add_argument(
         "-t", "--tls", help="connect to the server using TLS", action="store_true"
@@ -111,6 +128,16 @@ def main(argv):
     p.add_argument("-a", "--address", help="server address", default="127.0.0.1")
     p.add_argument("-p", "--port", type=int, default=9000, help="server listen port")
     p.add_argument("-v", "--verbose", action="store_true")
+
+    p.add_argument("-o", "--owner", help="owner of the bucket")
+    p.add_argument("-c", "--cluster", help="client cluster ID")
+    p.add_argument(
+        "-s",
+        "--update-state",
+        choices=["created", "deleting"],
+        help="update state of the bucket",
+    )
+
     ptls = p.add_argument_group("TLS arguments")
     ptls.add_argument("--ca-cert", help="CA certificate file")
     ptls.add_argument("--client-cert", help="client certificate file (NOT YET USED)")
@@ -137,6 +164,32 @@ def main(argv):
         server_address = args.uri
     logging.debug(f"using server_address {server_address}")
     success = False
+
+    if args.command:
+        if args.command == "add":
+            if not args.owner:
+                logging.error("add command requires an owner")
+                sys.exit(1)
+            if not args.cluster:
+                logging.error("add command requires a cluster")
+                sys.exit(1)
+
+        elif args.command == "delete":
+            if not args.cluster:
+                logging.error("delete command requires a cluster")
+                sys.exit(1)
+
+        elif args.command == "update":
+            if not args.cluster:
+                logging.error("update command requires a cluster")
+                sys.exit(1)
+            if not args.update_state:
+                logging.error("update command requires an update state")
+                sys.exit(1)
+
+        else:
+            logging.error(f"Unknown command '{args.command}'")
+            sys.exit(1)
 
     if args.tls:
         root_crt = _load_credential_from_file(args.ca_cert)
