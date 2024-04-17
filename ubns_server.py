@@ -205,7 +205,7 @@ def _load_credential_from_file(filepath):
 
 
 def run(args):
-    server_address = f"0.0.0.0:{args.port}"
+    server_address = f"{args.address}:{args.port}"
     logging.info("Starting gRPC service...\n")
     try:
         server = grpc.server(
@@ -246,6 +246,7 @@ if __name__ == "__main__":
     from sys import argv
 
     p = argparse.ArgumentParser(description="Auth gRPC server")
+    p.add_argument("address", type=str, help="Listen address", nargs="?", default="127.0.0.1")
     p.add_argument("port", type=int, help="Listen port", nargs="?", default=9000)
     p.add_argument(
         "-t", "--tls", help="connect to the server using TLS", action="store_true"

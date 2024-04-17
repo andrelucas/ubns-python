@@ -39,6 +39,7 @@ the cert is marked so it can be used as both a client and a server cert.
 
 ```sh
 ./create_cert.sh -a "extendedKeyUsage = clientAuth,serverAuth" \
+	-a "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1" \
 	localhost localhost
 ```
 
@@ -107,7 +108,9 @@ subjectAltName as well, just because not every TLS implementation cares about th
 You can add whatever X.509 extensions you like with this syntax:
 
 ```sh
-./create_cert.sh -a "subjectAltName = DNS:rhubarb.com,DNS:custard.com,IP:127.0.0.1,IP:[::1] rhubarb rhubarb.com
+./create_cert.sh \
+	-a "subjectAltName = DNS:rhubarb.com,DNS:custard.com,IP:127.0.0.1,IP:::1" \
+	rhubarb rhubarb.com
 ```
 
 ## <a name='Revokeacert'></a>Revoke a cert
