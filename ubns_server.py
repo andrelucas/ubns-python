@@ -205,7 +205,7 @@ def _load_credential_from_file(filepath):
 
 
 def run(args):
-    server_address = f"127.0.0.1:{args.port}"
+    server_address = f"0.0.0.0:{args.port}"
     logging.info("Starting gRPC service...\n")
     try:
         server = grpc.server(
