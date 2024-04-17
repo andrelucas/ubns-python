@@ -219,13 +219,15 @@ def run(args):
         if args.tls:
             server_crt = _load_credential_from_file(args.server_cert)
             server_key = _load_credential_from_file(args.server_key)
+            ca_crt = _load_credential_from_file(args.ca_cert)
             server_credentials = grpc.ssl_server_credentials(
                 (
                     (
                         server_key,
                         server_crt,
                     ),
-                )
+                ),
+                (ca_crt),
             )
             server.add_secure_port(server_address, server_credentials)
 
@@ -250,7 +252,7 @@ if __name__ == "__main__":
     )
     p.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
     ptls = p.add_argument_group("TLS arguments")
-    ptls.add_argument("--ca-cert", help="CA certificate file (NOT YET USED)")
+    ptls.add_argument("--ca-cert", help="CA certificate file")
     ptls.add_argument("--server-cert", help="client certificate file")
     ptls.add_argument("--server-key", help="client key file")
 
