@@ -178,7 +178,7 @@ class UBDBServer(ubdb_pb2_grpc.UBDBServiceServicer):
 
     def AddBucketEntry(self, request, context):
         logging.info(
-            f"received: AddBucketEntry: bucket={request.bucket} owner={request.owner} cluster={request.cluster}"
+            f"received: AddBucketEntry: bucket={request.bucket} cluster={request.cluster} owner={request.owner}"
         )
         try:
             self.db.add_bucket(request.bucket, request.cluster, request.owner)
@@ -189,7 +189,7 @@ class UBDBServer(ubdb_pb2_grpc.UBDBServiceServicer):
 
     def DeleteBucketEntry(self, request, context):
         logging.info(
-            f"received: DeleteBucketEntry: bucket={request.bucket} cluster={request.cluster}"
+            f"received: DeleteBucketEntry: bucket={request.bucket} cluster={request.cluster} owner={request.owner}"
         )
         try:
             self.db.delete_bucket(request.bucket, request.cluster, request.owner)
@@ -200,7 +200,7 @@ class UBDBServer(ubdb_pb2_grpc.UBDBServiceServicer):
 
     def UpdateBucketEntry(self, request, context):
         logging.info(
-            f"received: UpdateBucketEntry: bucket={request.bucket} cluster={request.cluster} state={request.state}"
+            f"received: UpdateBucketEntry: bucket={request.bucket} cluster={request.cluster} owner={request.owner} state={request.state}"
         )
         if request.state == ubdb_pb2.BucketState.BUCKET_STATE_CREATED:
             bstate = BucketState.CREATED
