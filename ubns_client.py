@@ -59,6 +59,7 @@ def delete(stub: ubdb_pb2_grpc.UBDBServiceStub, args):
     req = ubdb_pb2.DeleteBucketEntryRequest()
     req.bucket = args.bucket
     req.cluster = args.cluster
+    req.owner = args.owner
     try:
         response: ubdb_pb2.DeleteBucketResponse = stub.DeleteBucketEntry(req)
         logging.info(f"server response: {response}")
@@ -73,6 +74,7 @@ def update(stub: ubdb_pb2_grpc.UBDBServiceStub, args):
     req = ubdb_pb2.UpdateBucketEntryRequest()
     req.bucket = args.bucket
     req.cluster = args.cluster
+    req.owner = args.owner
     if args.update_state == "created":
         req.state = ubdb_pb2.BucketState.BUCKET_STATE_CREATED
     elif args.update_state == "deleting":
@@ -167,21 +169,27 @@ def main(argv):
 
     if args.command:
         if args.command == "add":
-            if not args.owner:
-                logging.error("add command requires an owner")
-                sys.exit(1)
             if not args.cluster:
                 logging.error("add command requires a cluster")
+                sys.exit(1)
+            if not args.owner:
+                logging.error("add command requires an owner")
                 sys.exit(1)
 
         elif args.command == "delete":
             if not args.cluster:
                 logging.error("delete command requires a cluster")
                 sys.exit(1)
+            if not args.owner:
+                logging.error("add command requires an owner")
+                sys.exit(1)
 
         elif args.command == "update":
             if not args.cluster:
                 logging.error("update command requires a cluster")
+                sys.exit(1)
+            if not args.owner:
+                logging.error("add command requires an owner")
                 sys.exit(1)
             if not args.update_state:
                 logging.error("update command requires an update state")

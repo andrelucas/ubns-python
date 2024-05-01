@@ -40,9 +40,16 @@ class BucketDeleteWhenNotInDeletingState(Exception):
 
 
 class MismatchedClusterError(Exception):
-    def __init__(self, bucket, cluster):
+    def __init__(self, bucket, cluster, newcluster):
         super().__init__(
-            f"bucket '{bucket}' cluster '{cluster}' does not match existing cluster '{cluster}'"
+            f"bucket '{bucket}' new cluster '{newcluster}' does not match existing cluster '{cluster}'"
+        )
+
+
+class MismatchedOwnerError(Exception):
+    def __init__(self, bucket, owner, newowner):
+        super().__init__(
+            f"bucket '{bucket}' new owner '{newowner}' does not match existing owner '{owner}'"
         )
 
 
@@ -55,7 +62,7 @@ class BucketState(Enum):
 
 
 class Bucket:
-    def __init__(self, name, owner, cluster):
+    def __init__(self, name, cluster, owner):
         self.name = name
         self.owner = owner
         self.cluster = cluster
@@ -79,19 +86,19 @@ class BucketNameDatabase:
     def __init__(self):
         self.buckets: dict[str, Bucket] = {}
 
-    def add_bucket(self, bucket_name, owner, cluster):
+    def add_bucket(self, bucket_name: str, cluster: str, owner: str):
         if bucket_name in self.buckets:
             logging.error(f"Bucket '{bucket_name}' already exists")
             raise BucketAlreadyExistsError(bucket_name)
 
-        bucket = Bucket(bucket_name, owner, cluster)
+        bucket = Bucket(bucket_name, cluster, owner)
         logging.info(f"add_bucket: new bucket={bucket_name}")
 
         self.buckets[bucket_name] = bucket
         self.buckets[bucket_name].state = BucketState.CREATING
         logging.info(f"Added bucket: {self.buckets[bucket_name]}")
 
-    def delete_bucket(self, bucket_name: str, cluster: str):
+    def delete_bucket(self, bucket_name: str, cluster: str, owner: str):
         if bucket_name not in self.buckets:
             logging.error(f"Bucket '{bucket_name}' not found")
             raise BucketNotFoundError(bucket_name)
@@ -103,7 +110,13 @@ class BucketNameDatabase:
             logging.error(
                 f"Cluster '{cluster}' does not match existing cluster '{bucket.cluster}'"
             )
-            raise MismatchedClusterError(bucket_name, cluster)
+            raise MismatchedClusterError(bucket_name, bucket.cluster, cluster)
+
+        if bucket.owner != owner:
+            logging.error(
+                f"Owner '{owner}' does not match existing owner '{bucket.owner}'"
+            )
+            raise MismatchedOwnerError(bucket_name, bucket.owner, owner)
 
         if bucket.state != BucketState.DELETING:
             msg = "bucket '{bucket_name}' is not in the DELETING state"
@@ -113,7 +126,7 @@ class BucketNameDatabase:
         logging.info(f"Deleting bucket: {self.buckets[bucket_name]}")
         del self.buckets[bucket_name]
 
-    def update_bucket(self, bucket_name: str, cluster: str, state: str):
+    def update_bucket(self, bucket_name: str, cluster: str, owner: str, state: str):
         if bucket_name not in self.buckets:
             logging.error(f"Bucket '{bucket_name}' not found")
             raise BucketNotFoundError(bucket_name)
@@ -125,7 +138,13 @@ class BucketNameDatabase:
             logging.error(
                 f"Cluster '{cluster}' does not match existing cluster '{bucket.cluster}'"
             )
-            raise MismatchedClusterError(bucket_name, cluster)
+            raise MismatchedClusterError(bucket_name, bucket.cluster, cluster)
+
+        if bucket.owner != owner:
+            logging.error(
+                f"Owner '{owner}' does not match existing owner '{bucket.owner}'"
+            )
+            raise MismatchedOwnerError(bucket_name, bucket.owner, owner)
 
         if state == BucketState.CREATED:
             if bucket.state != BucketState.CREATING:
@@ -162,7 +181,7 @@ class UBDBServer(ubdb_pb2_grpc.UBDBServiceServicer):
             f"received: AddBucketEntry: bucket={request.bucket} owner={request.owner} cluster={request.cluster}"
         )
         try:
-            self.db.add_bucket(request.bucket, request.owner, request.cluster)
+            self.db.add_bucket(request.bucket, request.cluster, request.owner)
             return ubdb_pb2.AddBucketEntryResponse()
         except Exception as e:
             self.set_context_error(context, e)
@@ -173,7 +192,7 @@ class UBDBServer(ubdb_pb2_grpc.UBDBServiceServicer):
             f"received: DeleteBucketEntry: bucket={request.bucket} cluster={request.cluster}"
         )
         try:
-            self.db.delete_bucket(request.bucket, request.cluster)
+            self.db.delete_bucket(request.bucket, request.cluster, request.owner)
             return ubdb_pb2.DeleteBucketEntryResponse()
         except Exception as e:
             self.set_context_error(context, e)
@@ -190,7 +209,9 @@ class UBDBServer(ubdb_pb2_grpc.UBDBServiceServicer):
         else:
             raise Exception(f"Unknown update state '{request.state}'")
         try:
-            self.db.update_bucket(request.bucket, request.cluster, bstate)
+            self.db.update_bucket(
+                request.bucket, request.cluster, request.owner, bstate
+            )
             return ubdb_pb2.UpdateBucketEntryResponse()
         except Exception as e:
             self.set_context_error(context, e)
@@ -246,7 +267,9 @@ if __name__ == "__main__":
     from sys import argv
 
     p = argparse.ArgumentParser(description="Auth gRPC server")
-    p.add_argument("address", type=str, help="Listen address", nargs="?", default="127.0.0.1")
+    p.add_argument(
+        "address", type=str, help="Listen address", nargs="?", default="127.0.0.1"
+    )
     p.add_argument("port", type=int, help="Listen port", nargs="?", default=9000)
     p.add_argument(
         "-t", "--tls", help="connect to the server using TLS", action="store_true"
