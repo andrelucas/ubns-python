@@ -175,6 +175,11 @@ class UBDBServer(ubdb_pb2_grpc.UBDBServiceServicer):
         context.set_code(grpc.StatusCode.INVALID_ARGUMENT)
         context.set_details(str(e))
         return
+    
+    def set_context_code(self, context, code: grpc.StatusCode, details: str):
+        context.set_code(code)
+        context.set_details(details)
+        return
 
     def AddBucketEntry(self, request, context):
         logging.info(
@@ -182,6 +187,9 @@ class UBDBServer(ubdb_pb2_grpc.UBDBServiceServicer):
         )
         try:
             self.db.add_bucket(request.bucket, request.cluster, request.owner)
+            return ubdb_pb2.AddBucketEntryResponse()
+        except BucketAlreadyExistsError as e:
+            self.set_context_code(context, grpc.StatusCode.ALREADY_EXISTS, str(e))
             return ubdb_pb2.AddBucketEntryResponse()
         except Exception as e:
             self.set_context_error(context, e)
@@ -193,6 +201,12 @@ class UBDBServer(ubdb_pb2_grpc.UBDBServiceServicer):
         )
         try:
             self.db.delete_bucket(request.bucket, request.cluster, request.owner)
+            return ubdb_pb2.DeleteBucketEntryResponse()
+        except MismatchedClusterError as e:
+            self.set_context_code(context, grpc.StatusCode.FAILED_PRECONDITION, str(e))
+            return ubdb_pb2.DeleteBucketEntryResponse()
+        except MismatchedOwnerError as e:
+            self.set_context_code(context, grpc.StatusCode.FAILED_PRECONDITION, str(e))
             return ubdb_pb2.DeleteBucketEntryResponse()
         except Exception as e:
             self.set_context_error(context, e)
@@ -212,6 +226,15 @@ class UBDBServer(ubdb_pb2_grpc.UBDBServiceServicer):
             self.db.update_bucket(
                 request.bucket, request.cluster, request.owner, bstate
             )
+            return ubdb_pb2.UpdateBucketEntryResponse()
+        except MismatchedClusterError as e:
+            self.set_context_code(context, grpc.StatusCode.FAILED_PRECONDITION, str(e))
+            return ubdb_pb2.UpdateBucketEntryResponse()
+        except MismatchedOwnerError as e:
+            self.set_context_code(context, grpc.StatusCode.FAILED_PRECONDITION, str(e))
+            return ubdb_pb2.UpdateBucketEntryResponse()
+        except BucketNotFoundError as e:
+            self.set_context_code(context, grpc.StatusCode.NOT_FOUND, str(e))
             return ubdb_pb2.UpdateBucketEntryResponse()
         except Exception as e:
             self.set_context_error(context, e)
